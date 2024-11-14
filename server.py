@@ -3,6 +3,7 @@ from socket import *
 import threading
 from datetime import datetime
 import json
+import signal
 
 
 class BulletinBoardServer(threading.Thread):
@@ -26,6 +27,22 @@ class BulletinBoardServer(threading.Thread):
         self.clients = []
         self.messages = []
 
+        # Boolean flag to help gracefully shutdown server with SIGINT
+        self.running = True
+
+
+    def signal_handler(self, signum, frame):
+        """Handle termiination signals to stop the server gracefully"""
+
+        print('\nReceived termination signal. Gracefully shutting down the server...')
+
+        # Set flag to stop server loop
+        self.running = False
+
+        # Close all client connections
+        for client in self.clients:
+            client.close()
+
 
     def run(self):
         """Start the server and listen for incoming connections"""
@@ -34,27 +51,37 @@ class BulletinBoardServer(threading.Thread):
         self.socket.bind((self.host, self.port))
         self.socket.listen()
         print(f'Server started on host {self.host}: port {self.port}')
+
+        # Register the signal handler for graceful shutdown
+        signal.signal(signal.SIGINT, self.signal_handler)
     
         try:
             # Continuously accept new connections 
-            while True:
-                # Accept new connection
-                client_socket, addr = self.socket.accept()
-                print(f'New client connection from {addr}')
+            while self.running:
+                # Set a timeout for a non-blocking behavior 
+                self.socket.settimeout(1) 
 
-                # Add cleint socket to the clients list
-                self.clients.append(client_socket)
+                try:
+                    # Accept new connection
+                    client_socket, addr = self.socket.accept()
+                    print(f'New client connection from {addr}')
 
-                # Start new thread to handle client request
-                threading.Thread(self.processRequest, args=(client_socket, addr))
+                    # Add cleint socket to the clients list
+                    self.clients.append(client_socket)
 
-    # NOTE: This keyboard interrupt method is not working... might have to implemetn a signal handler :(
-        except KeyboardInterrupt:
-            # Allow manual interruption for server shutdown
-            print('\nKeyboard Interrupt: Shutting Server Down...')
+                    # Start new thread to handle client request
+                    threading.Thread(self.processRequest, args=(client_socket, addr))
+
+                except timeout:
+                    # Continue the loop if the a timeout is hit
+                    continue
+        
+        except Exception as e:
+            # Display if any error occurs in server loop
+            print(f'Server Error: {e}')
 
         finally:
-            # Close the socket when server shuts down
+            # Before exiting out of the server loop completely, close down the server socket
             self.socket.close()
 
 
