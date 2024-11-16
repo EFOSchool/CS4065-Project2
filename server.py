@@ -70,7 +70,8 @@ class BulletinBoardServer(threading.Thread):
                     self.clients.append(client_socket)
 
                     # Start new thread to handle client request
-                    threading.Thread(self.processRequest, args=(client_socket, addr))
+                    client_thread = threading.Thread(target=self.processRequest, args=(client_socket, addr))
+                    client_thread.start()
 
                 except timeout:
                     # Continue the loop if the a timeout is hit
@@ -100,8 +101,12 @@ class BulletinBoardServer(threading.Thread):
             self.notify_all(f'{username} has joined the board', sender=None)
             
             # Send the last two messages in the board's history, if available
-            for message in (self.messages[-2:] if len(self.messages) >= 2 else self.messages):
-                client_socket.send(message.encode())
+            if len(self.messages) > 0:
+                client_socket.send('\nThese are the last two messages from the board\n'.encode())
+                for message in (self.messages[-2:] if len(self.messages) >= 2 else self.messages):
+                    client_socket.send((message + '\n').encode())
+            else:
+                client_socket.send('\nThere are no messages on the board yet'.encode())
 
             # Continously recieve messages from the client
             while True:
