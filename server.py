@@ -96,41 +96,36 @@ class BulletinBoardServer(threading.Thread):
         try:
             # Continuously receive messages from the client
             while True:
-                try:
-                    # Receive and decode the message from the client
-                    message = client_socket.recv(1024).decode().strip()
-                    if not message:
-                        continue
+                # Receive and decode the message from the client
+                message = client_socket.recv(1024).decode().strip()
+                if not message:
+                    continue
 
-                    # Parse the message using the Protocol class
-                    request = json.loads(message)
-                    header = request.get('header')
-                    command = header.get('command')
-                    username = header.get('username')
-                    body = request.get('body')
-                    data = body.get('data')
+                # Parse the message using the Protocol class
+                request = json.loads(message)
+                header = request.get('header')
+                command = header.get('command')
+                username = header.get('username')
+                body = request.get('body')
+                data = body.get('data')
 
-                    # Handle the connect command
-                    if command == 'connect':
-                        self.client_connection(client_socket, username)
-                        if not username:
-                            return
-
-                    # Handle the message command
-                    elif command == 'message':
-                        self.client_message(client_socket, username, data)
-                        if not username or not data:
-                            continue
-
-                    # Handle the exit command
-                    elif command == 'exit':
-                        self.client_exit(client_socket, username)
+                # Handle the connect command
+                if command == 'connect':
+                    self.client_connection(client_socket, username)
+                    if not username:
                         return
 
-                except ConnectionResetError:
-                    print(f'Connection reset by {addr}')
-                    break
+                # Handle the post command
+                elif command == 'post':
+                    self.client_post(client_socket, username, data)
+                    if not username or not data:
+                        continue
 
+                # Handle the exit command
+                elif command == 'exit':
+                    self.client_exit(client_socket, username)
+                    return
+                    
         except Exception as e:
             # Notify if any error occurs within this function
             print(f'Error when handling request from {addr}: {e}')
@@ -172,18 +167,38 @@ class BulletinBoardServer(threading.Thread):
             client_socket.send((response + '\n').encode())
 
     
-    def client_message(self, client_socket, username, data):
+    def client_post(self, client_socket, username, data):
+        """Add the post to the history and notify all that a message has been posted"""
         try:
             # Check for valid data and return fail if not
             if not username or not data:
                 response = Protocol.build_response("message", "FAIL")
                 client_socket.send((response + '\n').encode())
 
+            # Grab the subject and message out of data field
+            # The subject and content are seperated by a newline in the data field
+            parts = data.split('\n', 1) # split on first instance of \n
+
+            if len(parts) < 2:
+                # If the split doesn't result in both a subject and content, it's invalid
+                response = Protocol.build_response("post", "FAIL")
+                client_socket.send((response + '\n').encode())
+                return
+            
+            # Now that the subject and message are separated they get stored in subject and message variables
+            subject, message = parts[0], parts[1]
+
+            # Check if both subject and message are non-empty
+            if not subject or not message:
+                response = Protocol.build_response("post", "FAIL")
+                client_socket.send((response + '\n').encode())
+                return
+
             # Add client's message to the board's history
-            self.add_message(username, data)
+            message_id, timestamp = self.add_message(username, subject, message)
 
             # Notify all in the board of the new message with the sender specified
-            self.notify_all(f'{username}: {data}', username, sender=client_socket)
+            self.notify_all(f'Message ID: {message_id}, Sender: {username}, Time Posted: {timestamp}, Suject {subject}')
 
             # Send Response
             response = Protocol.build_response("message", "OK")
@@ -199,14 +214,10 @@ class BulletinBoardServer(threading.Thread):
     
     def client_exit(self, client_socket, username=None):
         """Remove a client from the client list and close its connection after recieving exit command"""
-
         try:
-            # Server display of client disconnection
-            print(f'{username} disconnected')
-
             # If there is a username, notify all (including the server) that <username> has left
             if username:
-                self.notify_all(f'{username} has left the board')
+                self.notify_all(f'{username} has left the board', sender=client_socket)
                 print(f'{username} disconnected')
 
             # Send a success response to the client for the exit command
@@ -226,12 +237,12 @@ class BulletinBoardServer(threading.Thread):
             client_socket.send((response + '\n').encode())
 
 
-    def notify_all(self, message, username=None, sender=None):
+    def notify_all(self, data, sender=None):
         """Broadcast message to all connected clients except the sender."""
-        notification_payload = Protocol.build_request("notify all", username, message)
+        notification_payload = Protocol.build_request("notify all", data=data)
         encoded_message = (notification_payload + '\n').encode()
 
-        # Iterate through each client (skipping the sender) and send the encoded message
+        # Iterate through each client and send the encoded message
         for client in self.clients:
             if client == sender: 
                 continue
@@ -241,7 +252,7 @@ class BulletinBoardServer(threading.Thread):
                 print(f'Failed to send message to a client ({client}): {e}')
     
 
-    def add_message(self, sender, message):
+    def add_message(self, sender, subject, message):
         """Add message to the server's message history"""
 
         # Get the current timestamp and format into a readable form
@@ -252,11 +263,14 @@ class BulletinBoardServer(threading.Thread):
             'id': len(self.messages) + 1,
             'sender': sender,
             'timestamp': timestamp,
+            'subject': subject,
             'message': message
         }
 
         # Convert the dictionary to JSON-formatted string and append to message history
         self.messages.append(json.dumps(formatted_message))
+
+        return formatted_message['id'], timestamp
 
 
 if __name__ == "__main__":

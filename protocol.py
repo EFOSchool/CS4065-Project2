@@ -3,7 +3,7 @@ import json
 class Protocol:
     """Handles message construction according to protocol specifications."""
 
-    def build_request(command, username, data=None):
+    def build_request(command, username=None, data=None):
         """Build the JSON request."""
         request = \
         {
