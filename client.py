@@ -96,33 +96,11 @@ class Client:
                         header = message_dict.get('header')
                         body = message_dict.get('body')
 
-                        # Extract command and status
-                        command = header.get('command')
-                        status = header.get('status')
-                        data = body.get('data')
-
-                        if command == 'join':
-                            if isinstance(data, list):  # If history is sent
-                                print(f"Message History:\n{data}\n>> ", end='')
-                            else:
-                                print(f"%join Response: {status} - {data}\n>> ", end='')
-
-                        elif command == 'leave':
-                            print(f"%leave Response: {status} - {data}\n>> ", end='')
-
-                        elif command == 'notify all':
-                            print(f"{data}\n>> ", end='')
-
-                        else:
-                            print(f"{command} Response: {status} - {data}\n>> ", end='')
-
-
-                        '''# If a status value exists in the header, a response has been read, handle accordingly
+                        # If a status value exists in the header, a response has been read, handle accordingly
                         if header.get('status'):
                             # Safely grab the command and status values
                             command = header.get('command')
                             status = header.get('status')
-                            data = body.get('data')
 
                             # Display to the client the response (OK or FAIL) to their request
                             print(f"\r'{command}' Response: {status}\n>> ", end='')
@@ -141,7 +119,7 @@ class Client:
                         elif header.get('command') == 'notify all':
                             message = body.get('data')
                             if message:
-                                print(f'\r{message}\n>> ', end='')'''
+                                print(f'\r{message}\n>> ', end='')
 
             except Exception as e:
                 # Only through an error if the client is still running
@@ -160,27 +138,13 @@ class Client:
                 # Prompt for user input and send the message 
                 message = input('>> ')
 
-                if message.startswith('%join'):
-                    request = Protocol.build_request('join', self.username)
-                    self.socket.send(request.encode())
-                
-                elif message.startswith('%leave'):
-                    request = Protocol.build_request('leave', self.username)
-                    self.socket.send(request.encode())
-            
                 # If the user types '%exit', send it to the server and break the loop
-                elif message == '%exit':
+                if message == '%exit':
                     message = Protocol.build_request('exit', self.username)
                     self.socket.send(message.encode())
                     sleep(.1) # Short wait to allow for server and client to handle request/response before ending
                     break
 
-                else:
-                    print("Invalid command.")
-
-                # Otherwise, send the typed message to the server
-                message = Protocol.build_request('message', self.username, message)
-                self.socket.send(message.encode())
                 # If the user's prompt starst with '%post', call the post_helper method to handle it
                 if message.startswith('%post'):
                     self.post_helper(message)

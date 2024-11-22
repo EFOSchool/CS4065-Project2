@@ -27,7 +27,6 @@ class BulletinBoardServer(threading.Thread):
         # Initialize bulletin board specific lists
         self.clients = []
         self.messages = []
-        self.board_users = []
 
         # Boolean flag to help gracefully shutdown server with SIGINT
         self.running = True
@@ -115,39 +114,6 @@ class BulletinBoardServer(threading.Thread):
                     self.client_connection(client_socket, username)
                     if not username:
                         return
-                    
-                    # Handle the join command
-                    elif command == 'join':
-                        self.handle_join(client_socket, username)
-                    
-                # Handle the post command
-                elif command == 'post':
-                    self.client_post(client_socket, username, data)
-                    if not username or not data:
-                        continue
-
-                    # Handle the leave command
-                    elif command == 'leave':
-                        self.handle_leave(client_socket, username)
-
-                    # Handle the exit command
-                    elif command == 'exit':
-                        self.client_exit(client_socket, username)
-                        return
-
-                    else:
-                        # Respond with an error for unrecognized commands
-                        response = Protocol.build_response(command, "FAIL", "Unknown command.")
-                        client_socket.send((response + '\n').encode())
-
-                except ConnectionResetError:
-                    print(f'Connection reset by {addr}')
-                    break
-                # Handle the connect command
-                if command == 'connect':
-                    self.client_connection(client_socket, username)
-                    if not username:
-                        return
 
                 # Handle the post command
                 elif command == 'post':
@@ -180,8 +146,18 @@ class BulletinBoardServer(threading.Thread):
             # Notify all clients in message board about new connection
             self.notify_all(f'{username} has joined the board')
             
-            # Respond with a success message to the client
-            response = Protocol.build_response("connect", "OK", "Connected successfully")
+            # Send the last two messages in the board's history, if available
+            if len(self.messages) > 0:
+                history_data = []
+                for message in (self.messages[-2:] if len(self.messages) >= 2 else self.messages):
+                    history_data.append(message)
+                # Build Repsonse
+                response = Protocol.build_response("connect", "OK", history_data)
+            else:
+                # Build Response for no messages being on board
+                response = Protocol.build_response("connect", "OK", "There are no messages on the board yet")
+
+            # Send Response
             client_socket.send((response + '\n').encode())
         
         except Exception as e:
@@ -190,27 +166,6 @@ class BulletinBoardServer(threading.Thread):
             response = Protocol.build_response("connect", "FAIL")
             client_socket.send((response + '\n').encode())
 
-    def handle_join(self, client_socket, username):
-        if username in self.board_users:
-            response = Protocol.build_response("join", "FAIL", "User already in the board.")
-        else:
-            self.board_users.append(username)
-            response = Protocol.build_response("join", "OK", f"{username} joined the message board.")
-            
-            # Notify all connected clients about the new user
-            self.notify_board(f"{username} has joined the message board.", username)
-
-            # Send the last two messages in the board's history, if available
-            if len(self.messages) > 0:
-                history_data = []
-                for message in (self.messages[-2:] if len(self.messages) >= 2 else self.messages):
-                    history_data.append(message)
-                response = Protocol.build_response("join", "OK", history_data)
-            else:
-                response = Protocol.build_response("join", "OK", "There are no messages on the board yet.")
-        
-        # Send the response to the client
-        client_socket.send((response + '\n').encode())
     
     def client_post(self, client_socket, username, data):
         """Add the post to the history and notify all that a message has been posted"""
@@ -256,31 +211,10 @@ class BulletinBoardServer(threading.Thread):
             response = Protocol.build_response("message", "FAIL")
             client_socket.send((response + '\n').encode())
 
-    def handle_leave(self, client_socket, username):
-        """Handle the leave command."""
-        if username not in self.board_users:
-            response = Protocol.build_response("leave", "FAIL", "User not in the board.")
-        else:
-            # Notify only remaining users in the board
-            self.notify_board(f"{username} has left the message board.", username)
-            
-            # Remove the user from the board_users list
-            self.board_users.remove(username)
-            
-            response = Protocol.build_response("leave", "OK", f"{username} left the message board.")
-
-        # Send the response to the client    
-        client_socket.send((response + '\n').encode())
     
     def client_exit(self, client_socket, username=None):
         """Remove a client from the client list and close its connection after recieving exit command"""
         try:
-            # Notify all connected clients about the user exiting the server
-            if username:
-                self.notify_all(f'{username} has disconnected from the server.', username)
-
-            # Log disconnection and send a response
-            print(f'{username} disconnected')
             # If there is a username, notify all (including the server) that <username> has left
             if username:
                 self.notify_all(f'{username} has left the board', sender=client_socket)
@@ -291,12 +225,7 @@ class BulletinBoardServer(threading.Thread):
             client_socket.send((response + '\n').encode())
 
             # Remove the client socket from connected clients list
-            if client_socket in self.clients:
-                self.clients.remove(client_socket)
-
-            # Remove the user from the board_users list if still present
-            if username in self.board_users:
-                self.board_users.remove(username)
+            self.clients.remove(client_socket)
 
             # Close down the socket
             client_socket.close()
@@ -313,34 +242,16 @@ class BulletinBoardServer(threading.Thread):
         notification_payload = Protocol.build_request("notify all", data=data)
         encoded_message = (notification_payload + '\n').encode()
 
-        # Send to all clients except the sender
         # Iterate through each client and send the encoded message
         for client in self.clients:
-            if client == sender:
+            if client == sender: 
                 continue
-            try:
+            try: 
                 client.send(encoded_message)
             except Exception as e:
-                print(f"Failed to send message to a client ({client}): {e}")
+                print(f'Failed to send message to a client ({client}): {e}')
     
 
-    def notify_board(self, message, username=None, sender=None):
-        """Broadcast message to all connected clients who are part of the message board."""
-        notification_payload = Protocol.build_request("notify all", username, message)
-        encoded_message = (notification_payload + '\n').encode()
-
-        # Iterate through clients in board_users to ensure correct filtering
-        for client in self.clients:
-            # Skip the sender or clients not in `board_users`
-            if client == sender:
-                continue
-            try:
-                client.send(encoded_message)
-            except Exception as e:
-                print(f"Failed to send message to a client ({client}): {e}")
-
-
-    def add_message(self, sender, message):
     def add_message(self, sender, subject, message):
         """Add message to the server's message history"""
 
