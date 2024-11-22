@@ -28,6 +28,7 @@ class BulletinBoardServer(threading.Thread):
         self.clients = []
         self.messages = []
         self.message_board_clients = []
+        self.default_board_users = []
 
         # Boolean flag to help gracefully shutdown server with SIGINT
         self.running = True
@@ -125,6 +126,14 @@ class BulletinBoardServer(threading.Thread):
                     self.client_post(client_socket, username, data)
                     if not username or not data:
                         continue
+                    
+                # Handle the users command
+                elif command == 'users':
+                    self.get_users(client_socket)
+                    
+                # Handle the message command
+                elif command == 'message':
+                    self.get_message(client_socket, data)
 
                 # Handle the leave command
                 elif command == 'leave':
@@ -186,6 +195,9 @@ class BulletinBoardServer(threading.Thread):
         # Add the client to the message board list
         self.message_board_clients.append(client_socket)
         print(f"{username} joined the message board.")
+        
+        # Add the username to the default board users list
+        self.default_board_users.append(username)
 
         # Notify the client that they have joined
         join_confirmation = Protocol.build_response("join", "OK", "You have joined the message board.")
@@ -258,6 +270,9 @@ class BulletinBoardServer(threading.Thread):
         # Remove the client from the message board list
         self.message_board_clients.remove(client_socket)
         print(f"{username} left the message board.")
+        
+        # Remove the username from the default board list
+        self.default_board_users.remove(username)
 
         # Notify the leaving client
         response = Protocol.build_response("leave", "OK", "You have left the message board.")
@@ -340,6 +355,73 @@ class BulletinBoardServer(threading.Thread):
 
         return formatted_message['id'], timestamp
 
+    def get_users(self, client_socket):
+        """ 
+            Retrieve a list of users in the same group.
+            This is for Part 1, where we assume everyone is in 
+            the same (default) group.
+        """
+                
+        try:
+            # Check if the client is in the message board clients list
+            if client_socket not in self.message_board_clients:
+                response = Protocol.build_response("users", "FAIL", "Current user is not in a message board.")
+                client_socket.send((response + '\n').encode())
+                return
+            
+            # format response
+            user_list = ', '.join(self.default_board_users)
+            
+            # build response from users global list
+            response = Protocol.build_response("users", "OK", user_list)
+            
+            # send response
+            client_socket.send((response + '\n').encode())
+            
+        except Exception as e:
+            # Notify if any error occurs within this function
+            print(f'Error when handling users request: {e}')
+            
+            # send a failure response
+            response = Protocol.build_response("users", "FAIL")
+            client_socket.send((response + '\n').encode())
+            
+    def get_message(self, client_socket, data):
+        """ 
+            Retrieve a message via ID from the message history
+            from the default message board (Part 1)
+        """
+        try:
+            # using this to make sure they typed in an integer to get the ID
+            message_id = int(data)
+            
+            # if there is an invalid ID given
+            if message_id < 0 or message_id > len(self.messages):
+                # return a failure response
+                response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
+                client_socket.send((response + '\n').encode())
+            
+            # search through messages for the message with the given id
+            for message in self.messages:
+                message_dict = json.loads(message)
+                # search by ID
+                if int(message_dict['id']) == int(data):
+                    # format the response for readability
+                    formatted_message = f"Subject: {message_dict['subject']}\nMessage: {message_dict['message']}"
+                    
+                    # build response with the message
+                    response = Protocol.build_response("message", "OK", formatted_message)
+                    client_socket.send((response + '\n').encode())
+                    return
+        except ValueError:
+            # if the data represents a non integer
+            response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
+            client_socket.send((response + '\n').encode())
+        except Exception as e:
+            print(f'Error when handling message request from: {e}')
+            response = Protocol.build_response("message", "FAIL")
+            client_socket.send((response + '\n').encode())
+        
 
 if __name__ == "__main__":
     server = BulletinBoardServer('', 6789)
