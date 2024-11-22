@@ -130,6 +130,10 @@ class BulletinBoardServer(threading.Thread):
                 # Handle the users command
                 elif command == 'users':
                     self.get_users(client_socket)
+                    
+                # Handle the message command
+                elif command == 'message':
+                    self.get_message(client_socket, data)
 
                 # Handle the leave command
                 elif command == 'leave':
@@ -376,12 +380,47 @@ class BulletinBoardServer(threading.Thread):
             
         except Exception as e:
             # Notify if any error occurs within this function
-            print(f'Error when handling users request from FIX THIS: {e}')
+            print(f'Error when handling users request: {e}')
             
             # send a failure response
             response = Protocol.build_response("users", "FAIL")
             client_socket.send((response + '\n').encode())
             
+    def get_message(self, client_socket, data):
+        """ 
+            Retrieve a message via ID from the message history
+            from the default message board (Part 1)
+        """
+        try:
+            # using this to make sure they typed in an integer to get the ID
+            message_id = int(data)
+            
+            # if there is an invalid ID given
+            if message_id < 0 or message_id > len(self.messages):
+                # return a failure response
+                response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
+                client_socket.send((response + '\n').encode())
+            
+            # search through messages for the message with the given id
+            for message in self.messages:
+                message_dict = json.loads(message)
+                # search by ID
+                if int(message_dict['id']) == int(data):
+                    # format the response for readability
+                    formatted_message = f"Subject: {message_dict['subject']}\nMessage: {message_dict['message']}"
+                    
+                    # build response with the message
+                    response = Protocol.build_response("message", "OK", formatted_message)
+                    client_socket.send((response + '\n').encode())
+                    return
+        except ValueError:
+            # if the data represents a non integer
+            response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
+            client_socket.send((response + '\n').encode())
+        except Exception as e:
+            print(f'Error when handling message request from: {e}')
+            response = Protocol.build_response("message", "FAIL")
+            client_socket.send((response + '\n').encode())
         
 
 if __name__ == "__main__":
