@@ -106,7 +106,22 @@ class Client:
                             print(f"\r'{command}' Response: {status}\n>> ", end='')
 
                             # If the response is for the connect command, data will contain the last 2 messages in the group joined
-                            if command == 'connect':
+                            if command == 'join' and status == 'OK':
+                                # Display join confirmation
+                                data = body.get('data')
+                                print(f'\r{data}\n>> ', end='')
+                            
+                            elif command == 'history' and status == 'OK':
+                                # Display the message history or "no messages" notice
+                                data = body.get('data')
+                                if isinstance(data, list):  # Display the last two messages if available
+                                    for msg in data:
+                                        print(f'\rMessage ID: {msg["id"]}, Sender: {msg["sender"]}, '
+                                            f'Time Posted: {msg["timestamp"]}, Subject: {msg["subject"]}\n>> ', end='')
+                                else:
+                                    print(f'\r{data}\n>> ', end='')
+
+                            elif command == 'leave' and status == 'OK':
                                 data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
@@ -120,6 +135,12 @@ class Client:
                             message = body.get('data')
                             if message:
                                 print(f'\r{message}\n>> ', end='')
+
+                        # Handle 'notify board' for messages visible only to board participants
+                        elif header.get('command') == 'notify board':
+                            message = body.get('data')
+                            if message:
+                                print(f'\r[Board] {message}\n>> ', end='')
 
             except Exception as e:
                 # Only through an error if the client is still running
@@ -138,15 +159,23 @@ class Client:
                 # Prompt for user input and send the message 
                 message = input('>> ')
 
+                if message.startswith('%join'):
+                    join_request = Protocol.build_request('join', self.username)
+                    self.socket.send(join_request.encode())
+
+                elif message.startswith('%leave'):
+                    leave_request = Protocol.build_request('leave', self.username)
+                    self.socket.send(leave_request.encode())
+                
                 # If the user types '%exit', send it to the server and break the loop
-                if message == '%exit':
+                elif message == '%exit':
                     message = Protocol.build_request('exit', self.username)
                     self.socket.send(message.encode())
                     sleep(.1) # Short wait to allow for server and client to handle request/response before ending
                     break
 
                 # If the user's prompt starst with '%post', call the post_helper method to handle it
-                if message.startswith('%post'):
+                elif message.startswith('%post'):
                     self.post_helper(message)
 
                 # # Otherwise, send the typed message to the server
