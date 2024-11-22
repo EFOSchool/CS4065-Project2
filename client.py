@@ -120,6 +120,11 @@ class Client:
                                             f'Time Posted: {msg["timestamp"]}, Subject: {msg["subject"]}\n>> ', end='')
                                 else:
                                     print(f'\r{data}\n>> ', end='')
+                                    
+                            elif command == 'users':
+                                # Display the list of users/error message if available
+                                data = body.get('data')
+                                print(f'\r{data}\n>> ', end='')
 
                             elif command == 'leave' and status == 'OK':
                                 data = body.get('data')
@@ -166,6 +171,10 @@ class Client:
                 elif message.startswith('%leave'):
                     leave_request = Protocol.build_request('leave', self.username)
                     self.socket.send(leave_request.encode())
+                    
+                elif message.startswith('%users'):
+                    users_request = Protocol.build_request('users', self.username)
+                    self.socket.send(users_request.encode())
                 
                 # If the user types '%exit', send it to the server and break the loop
                 elif message == '%exit':
