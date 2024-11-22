@@ -135,6 +135,10 @@ class Client:
                                 data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
+                            elif command == 'groups' and status == 'OK':
+                                data = body.get('data')
+                                print(f'\r{data}\n>> ', end='')
+
                             if command == 'exit' and status == 'OK':
                                 print('\rShutting down client...')
                                 self.shutdown()
@@ -197,6 +201,11 @@ class Client:
                 # If the user's prompt starst with '%post', call the post_helper method to handle it
                 elif message.startswith('%post'):
                     self.post_helper(message)
+
+                # If the user types '%groups', send it to the server
+                elif message == '%groups':
+                    message = Protocol.build_request('groups')
+                    self.socket.send(message.encode())
 
                 # # Otherwise, send the typed message to the server
                 # message = Protocol.build_request('message', self.username, message)

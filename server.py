@@ -29,6 +29,14 @@ class BulletinBoardServer(threading.Thread):
         self.messages = []
         self.message_board_clients = []
         self.default_board_users = []
+        self.private_groups = \
+            {
+                "group one": [],
+                "group two": [],
+                "group three": [],
+                "group four": [],
+                "group five": [],
+            }
 
         # Boolean flag to help gracefully shutdown server with SIGINT
         self.running = True
@@ -143,6 +151,10 @@ class BulletinBoardServer(threading.Thread):
                 elif command == 'exit':
                     self.client_exit(client_socket, username)
                     return
+                
+                # Handle the groups command
+                elif command == 'groups':
+                    self.client_groups(client_socket)
                     
         except Exception as e:
             # Notify if any error occurs within this function
@@ -305,6 +317,23 @@ class BulletinBoardServer(threading.Thread):
             print(f'Error when handling request from {username}: {e}')
             response = Protocol.build_response("exit", "FAIL")
             client_socket.send((response + '\n').encode())
+
+
+    def client_groups(self, client_socket):
+        """Display a lists of groups"""
+        try:
+            # Grab the list of groups and format into a string seperated by commas
+            groups = [key for key in self.private_groups.keys()]
+            formatted_groups = ", ".join(groups)
+
+            # Build and send a response containing the string list of the groups
+            response = Protocol.build_response("groups", "OK", formatted_groups)
+            client_socket.send((response + '\n').encode())
+
+        except:
+            # If any point in the process above failed, send a FAIL response
+            response = Protocol.build_response("groups", "FAIL")
+            client_socket.send((response + '\n'))
 
 
     def notify_board(self, message, sender=None):
