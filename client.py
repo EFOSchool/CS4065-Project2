@@ -1,6 +1,8 @@
 from socket import *
 import threading
 import json
+import re
+from time import sleep
 from protocol import Protocol
 
 class Client:
@@ -35,7 +37,7 @@ class Client:
         port = int(parts[2])
 
         # Establish connection with the specified address adn port
-        client.connect(addr, port)
+        self.connect(addr, port)
     
     def connect(self, host, port):
         """Connect to the bulletin board server"""
@@ -65,9 +67,6 @@ class Client:
         except Exception as e:
             print('Problem connecting and interacting with the server. Make sure it is running')
             print(f'Error encountered: {e}')
-        
-        finally:
-            self.socket.close() # Close the socket connection when done
 
     
     def receive_messages(self):
@@ -133,6 +132,11 @@ class Client:
                                 data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
+                            if command == 'exit' and status == 'OK':
+                                print('\rShutting down client...')
+                                self.shutdown()
+                                break
+
                         # If the command is 'notify all' (a broadcast signal) display the message it contains in data
                         elif header.get('command') == 'notify all':
                             message = body.get('data')
@@ -152,7 +156,7 @@ class Client:
         """Prompt user and send messages to the server"""
 
         try:
-            while True:
+            while self.running:
                 # Prompt for user input and send the message 
                 message = input('>> ')
 
@@ -168,6 +172,7 @@ class Client:
                 elif message == '%exit':
                     message = Protocol.build_request('exit', self.username)
                     self.socket.send(message.encode())
+                    sleep(.1) # Short wait to allow for server and client to handle request/response before ending
                     break
 
                 else:
@@ -176,14 +181,48 @@ class Client:
                 # Otherwise, send the typed message to the server
                 message = Protocol.build_request('message', self.username, message)
                 self.socket.send(message.encode())
+                # If the user's prompt starst with '%post', call the post_helper method to handle it
+                if message.startswith('%post'):
+                    self.post_helper(message)
 
-        except KeyboardInterrupt:
-            print('\nExiting...')
-            message = Protocol.build_request('exit', self.username)
-            self.socket.send(message.encode()) # Send exit command to server
+                # # Otherwise, send the typed message to the server
+                # message = Protocol.build_request('message', self.username, message)
+                # self.socket.send(message.encode())
 
-        finally:
-            self.shutdown()
+        except Exception as e:
+            print(f'Error sending message "{message}: {e}')
+
+        # except KeyboardInterrupt:
+        #     print('\nExiting...')
+        #     message = Protocol.build_request('exit', self.username)
+        #     self.socket.send(message.encode()) # Send exit command to server
+
+
+    def post_helper(self, message):
+        """Helper function to format data passed in post command into a request"""
+        """
+            Example command format:
+                >> %post "Hello Everyone" "I am a new user"
+        """
+        # Regular expression to capture quoted parts (subject and content)
+        # This will handle quoted strings like "Hello Everyone" and "I am a new user"
+        match = re.match(r'%post\s+"([^"]+)"\s+"([^"]+)"', message)
+
+        if not match:
+            print("Invalid message format")
+            return  # or handle error as needed
+
+        # Extract the subject and content from the match
+        subject = match.group(1)
+        content = match.group(2)
+        
+        # Build the data field where the subject and content is seperated by a newline
+        data = f'{subject}\n{content}'
+
+        # Build the request for the post command and send to server
+        request = Protocol.build_request('post', self.username, data)
+        self.socket.send(request.encode())
+
 
     def shutdown(self):
         """Clean up resources and stop the client."""
