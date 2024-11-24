@@ -144,9 +144,10 @@ class Client:
                                 self.shutdown()
                                 break
 
-                        # If the command is 'notify all' (a broadcast signal) display the message it contains in data
-                        elif header.get('command') == 'notify all':
+                        # If the command is 'notify' (a broadcast signal) display the message it contains in data
+                        elif header.get('command') == 'notify':
                             message = body.get('data')
+                            message = message.replace('\\n', '\n')
                             if message:
                                 print(f'\r{message}\n>> ', end='')
 
@@ -207,6 +208,9 @@ class Client:
                     message = Protocol.build_request('groups')
                     self.socket.send(message.encode())
 
+                elif message.startswith('%grouppost'):
+                    self.post_helper(message, group=True)
+
                 # # Otherwise, send the typed message to the server
                 # message = Protocol.build_request('message', self.username, message)
                 # self.socket.send(message.encode())
@@ -220,30 +224,52 @@ class Client:
         #     self.socket.send(message.encode()) # Send exit command to server
 
 
-    def post_helper(self, message):
+    def post_helper(self, message, group=False):
         """Helper function to format data passed in post command into a request"""
         """
-            Example command format:
+            Example post command format:
                 >> %post "Hello Everyone" "I am a new user"
+                
+            Example grouppost command format:
+                >> %grouppost "group four" "Hello Everyone" "I am a new user"
         """
-        # Regular expression to capture quoted parts (subject and content)
-        # This will handle quoted strings like "Hello Everyone" and "I am a new user"
-        match = re.match(r'%post\s+"([^"]+)"\s+"([^"]+)"', message)
 
-        if not match:
+        if not group:
+            # Regular expression to capture quoted parts (subject and content)
+            # This will handle 2 quoted strings like "Hello Everyone" and "I am a new user"
+            post_match = re.match(r'%post\s+"([^"]+)"\s+"([^"]+)"', message)
+
+            # Extract the subject and content from the match
+            subject = post_match.group(1)
+            content = post_match.group(2)
+            
+            # Build the data field where the subject and content is seperated by a newline
+            data = f'{subject}\n{content}'
+
+            # Build the request for the post command and send to server
+            request = Protocol.build_request('post', self.username, data=data)
+            self.socket.send(request.encode())
+
+        elif group:
+            # Regular expression to capture quoted parts (subject and content)
+            # This will handle 3 quote strings like "Group Four", "Hello Everyone", and "I am a new user"
+            grouppost_match = re.match(r'%grouppost\s+"([^"]+)"\s+"([^"]+)"\s+"([^"]+)"', message)
+
+            # Extract the subject and content from the match
+            group = grouppost_match.group(1)
+            subject = grouppost_match.group(2)
+            content = grouppost_match.group(3)
+            
+            # Build the data field where the subject and content is seperated by a newline
+            data = f'{subject}\n{content}'
+
+            # Build the request for the post command and send to server
+            request = Protocol.build_request('grouppost', self.username, group, data)
+            self.socket.send(request.encode())
+
+        else:
             print("Invalid message format")
             return  # or handle error as needed
-
-        # Extract the subject and content from the match
-        subject = match.group(1)
-        content = match.group(2)
-        
-        # Build the data field where the subject and content is seperated by a newline
-        data = f'{subject}\n{content}'
-
-        # Build the request for the post command and send to server
-        request = Protocol.build_request('post', self.username, data)
-        self.socket.send(request.encode())
 
 
     def shutdown(self):

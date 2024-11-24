@@ -116,6 +116,7 @@ class BulletinBoardServer(threading.Thread):
                 header = request.get('header')
                 command = header.get('command')
                 username = header.get('username')
+                group = header.get('group')
                 body = request.get('body')
                 data = body.get('data')
 
@@ -155,6 +156,9 @@ class BulletinBoardServer(threading.Thread):
                 # Handle the groups command
                 elif command == 'groups':
                     self.client_groups(client_socket)
+
+                elif command == 'grouppost':
+                    self.client_post(client_socket, username, data, group)
                     
         except Exception as e:
             # Notify if any error occurs within this function
@@ -174,7 +178,7 @@ class BulletinBoardServer(threading.Thread):
             print(f'{username} connected')
 
             # Notify all clients in message board about new connection
-            self.notify_all(f'{username} has joined the board')
+            self.notify(f'{username} has joined the server', clients=self.clients)
             
             # Send the last two messages in the board's history, if available
             if len(self.messages) > 0:
@@ -224,51 +228,56 @@ class BulletinBoardServer(threading.Thread):
         client_socket.send((response + '\n').encode())
 
         # Notify others on the board
-        self.notify_board(f"{username} has joined the message board.", sender=client_socket)
+        self.notify(f"{username} has joined the message board.", clients=self.message_board_clients, sender=client_socket)
 
 
-    def client_post(self, client_socket, username, data):
+    def client_post(self, client_socket, username, data, group=None):
         """Add the post to the history and notify all that a message has been posted"""
         try:
+            # Make sure the command being sent in response directly correlates to if it is a group post or just a post
+            command = "grouppost" if group else "post"
+
             # Check for valid data and return fail if not
             if not username or not data:
-                response = Protocol.build_response("message", "FAIL")
+                response = Protocol.build_response(command, "FAIL")
                 client_socket.send((response + '\n').encode())
+                return
 
             # Grab the subject and message out of data field
             # The subject and content are seperated by a newline in the data field
             parts = data.split('\n', 1) # split on first instance of \n
 
-            if len(parts) < 2:
-                # If the split doesn't result in both a subject and content, it's invalid
-                response = Protocol.build_response("post", "FAIL")
+            if len(parts) < 2 or not parts[0].strip() or not parts[1].strip():
+                # Ensure both subject and message exist and are non-empty
+                response = Protocol.build_response(command, "FAIL")
                 client_socket.send((response + '\n').encode())
                 return
             
             # Now that the subject and message are separated they get stored in subject and message variables
-            subject, message = parts[0], parts[1]
+            subject, message = parts[0].strip(), parts[1].strip()
 
             # Check if both subject and message are non-empty
-            if not subject or not message:
-                response = Protocol.build_response("post", "FAIL")
+            if group and group not in self.private_groups:
+                response = Protocol.build_response(command, "FAIL", "Not a member of that group")
                 client_socket.send((response + '\n').encode())
                 return
 
             # Add client's message to the board's history
             message_id, timestamp = self.add_message(username, subject, message)
 
-            # Notify all in the board of the new message with the sender specified
-            self.notify_all(f'Message ID: {message_id}, Sender: {username}, Time Posted: {timestamp}, Suject {subject}')
+            # Notify all in the board or group of the new message with the sender specified
+            clients = self.message_board_clients if not group else self.private_groups[group]
+            self.notify(f'Message ID: {message_id}, Sender: {username}, Time Posted: {timestamp}, Subject: {subject}\n\t{message}', clients=clients)
 
             # Send Response
-            response = Protocol.build_response("message", "OK")
+            response = Protocol.build_response(command, "OK")
             client_socket.send((response + '\n').encode())
 
         # Send Bad Response
         except Exception as e:
             # Notify if any error occurs within this function
             print(f'Error when handling request from {username}: {e}')
-            response = Protocol.build_response("message", "FAIL")
+            response = Protocol.build_response(command, "FAIL")
             client_socket.send((response + '\n').encode())
 
 
@@ -291,7 +300,7 @@ class BulletinBoardServer(threading.Thread):
         client_socket.send((response + '\n').encode())
 
         # Notify others on the board
-        self.notify_board(f"{username} has left the message board.", sender=client_socket)
+        self.notify(f"{username} has left the message board.", clients=self.message_board_clients, sender=client_socket)
 
     
     def client_exit(self, client_socket, username=None):
@@ -299,7 +308,7 @@ class BulletinBoardServer(threading.Thread):
         try:
             # If there is a username, notify all (including the server) that <username> has left
             if username:
-                self.notify_all(f'{username} has left the board', sender=client_socket)
+                self.notify(f'{username} has left the server', clients=self.clients, sender=client_socket)
                 print(f'{username} disconnected')
 
             # Send a success response to the client for the exit command
@@ -349,13 +358,14 @@ class BulletinBoardServer(threading.Thread):
                 print(f"Failed to send message to a client on the board ({client}): {e}")
 
 
-    def notify_all(self, data, sender=None):
-        """Broadcast message to all connected clients except the sender."""
-        notification_payload = Protocol.build_request("notify all", data=data)
+    def notify(self, data, clients, sender=None):
+        """Broadcast message to a selected group of clients except the sender."""
+        escaped_data = data.replace('\n', '\\n')
+        notification_payload = Protocol.build_request("notify", data=escaped_data)
         encoded_message = (notification_payload + '\n').encode()
 
         # Iterate through each client and send the encoded message
-        for client in self.clients:
+        for client in clients:
             if client == sender: 
                 continue
             try: 
