@@ -178,6 +178,16 @@ class Client:
                     join_request = Protocol.build_request('join', self.username)
                     self.socket.send(join_request.encode())
 
+                elif message.startswith('%groupjoin'):
+                    group_name = message.split(maxsplit=1)[1].strip('"').strip("'")
+                    join_request = Protocol.build_request('groupjoin', self.username, group=group_name)
+                    self.socket.send(join_request.encode())
+
+                elif message.startswith('%groupleave'):
+                    group_name = message.split(maxsplit=1)[1].strip('"').strip("'")
+                    leave_request = Protocol.build_request('groupleave', self.username, group=group_name)
+                    self.socket.send(leave_request.encode())
+
                 elif message.startswith('%leave'):
                     leave_request = Protocol.build_request('leave', self.username)
                     self.socket.send(leave_request.encode())

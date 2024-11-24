@@ -5,8 +5,7 @@ class Protocol:
 
     def build_request(command, username=None, group=None, data=None):
         """Build the JSON request."""
-        request = \
-        {
+        request = {
             "header": {
                 "command": command,
                 "username": username,
