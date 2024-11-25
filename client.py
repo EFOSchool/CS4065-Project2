@@ -112,53 +112,59 @@ class Client:
                             data = body.get('data')
 
                             # Display to the client the response (OK or FAIL) to their request
-                            print(f"\r'{command}' Response: {status}\n>> ", end='')
+                            # print(f"\r'{command}' Response: {status}\n", end='')
 
-                            # If the response is for the connect command, data will contain the last 2 messages in the group joined
-                            if command == 'join' and status == 'OK':
-                                # Display join confirmation
-                                print(f'\r{data}\n>> ', end='')
+                            # If the response is a failure output the message
+                            if status == 'FAIL':
+                                # Display Error Message from the Server
+                                print(f'\rFAILURE: {data}\n>> ', end='')
+
+                            # # If the response is for the connect command, data will contain the last 2 messages in the group joined
+                            # if command == 'join' and status == 'OK':
+                            #     # Display join confirmation
+                            #     print(f'\r{data}\n>> ', end='')
                             
-                            elif command == 'history' and status == 'OK':
+                            elif command == 'history':
                                 # Display the message history or "no messages" notice
                                 if isinstance(data, list):  # Display the last two messages if available
+                                    print('Last two messages:')
                                     for msg in data:
                                         print(f'\rMessage ID: {msg["id"]}, Sender: {msg["sender"]}, '
                                             f'Time Posted: {msg["timestamp"]}, Subject: {msg["subject"]}\n>> ', end='')
                                 else:
                                     print(f'\r{data}\n>> ', end='')
                                     
-                            elif command == 'users':
-                                # Display the list of users/error message if available
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'users':
+                            #     # Display the list of users/error message if available
+                            #     print(f'\r{data}\n>> ', end='')
                                 
-                            elif command == 'message':
-                                # Display the message requested by the user
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'message':
+                            #     # Display the message requested by the user
+                            #     print(f'\r{data}\n>> ', end='')
 
-                            elif command == 'leave' and status == 'OK':
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'leave' and status == 'OK':
+                            #     print(f'\r{data}\n>> ', end='')
 
-                            elif command == 'groups' and status == 'OK':
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'groups' and status == 'OK':
+                            #     print(f'\r{data}\n>> ', end='')
                                 
-                            elif command == 'groupusers':
-                                # Display the list of users in the group or error is available
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'groupusers':
+                            #     # Display the list of users in the group or error is available
+                            #     print(f'\r{data}\n>> ', end='')
                             
-                            elif command == 'groupmessage':
-                                # Display the message requested by the user (group specific)
-                                print(f'\r{data}\n>> ', end='')
+                            # elif command == 'groupmessage':
+                            #     # Display the message requested by the user (group specific)
+                            #     print(f'\r{data}\n>> ', end='')
 
-                            if command == 'exit' and status == 'OK':
+                            elif command == 'exit':
                                 # Shutdown the Client Side
                                 print('\rShutting down client...')
                                 self.shutdown()
                                 break
 
-                            if status == 'FAIL' and data:
-                                # Display Error Message from the Server
-                                print(f'\rERROR: {data}\n>> ', end='')
+                            elif data:
+                                # Display the data contained in the response 
+                                print(f'\r{data}\n>> ', end='')
 
                         # If the command is 'notify' (a broadcast signal) display the message it contains in data
                         elif header.get('command') == 'notify':

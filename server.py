@@ -277,7 +277,7 @@ class BulletinBoardServer(threading.Thread):
         self.private_group_users[group].append(username)
 
         # Notify the user
-        confirmation = Protocol.build_response("groupjoin", "OK", f"You have joined group {group}.")
+        confirmation = Protocol.build_response("groupjoin", "OK", f"You have joined {group}.")
         client_socket.send((confirmation + '\n').encode())
 
         # Send group history or no messages notice
