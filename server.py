@@ -201,7 +201,7 @@ class BulletinBoardServer(threading.Thread):
     def client_connection(self, client_socket, username):
         # If there is not a username then a failure occurs
         if not username:
-            response = Protocol.build_response("connect", "FAIL")
+            response = Protocol.build_response("connect", "FAIL", "Username is required to connect.")
             client_socket.send((response + '\n').encode())
             client_socket.close()
             return
@@ -227,7 +227,7 @@ class BulletinBoardServer(threading.Thread):
     def client_join(self, client_socket, username):
         """Handle a client joining the message board."""
         if client_socket in self.message_board_clients:
-            response = Protocol.build_response("join", "FAIL", "You are already on the message board.")
+            response = Protocol.build_response("join", "FAIL", "You are already connected to the message board.")
             client_socket.send((response + '\n').encode())
             return
 
@@ -259,13 +259,13 @@ class BulletinBoardServer(threading.Thread):
 
         """Handle a client joining a private group."""
         if not group or group not in self.private_group_users:
-            response = Protocol.build_response("groupjoin", "FAIL", "Invalid group.")
+            response = Protocol.build_response("groupjoin", "FAIL", "The specified group does not exist.")
             client_socket.send((response + '\n').encode())
             return
 
         # Check if already in the group
         if client_socket in self.private_group_clients[group]:
-            response = Protocol.build_response("groupjoin", "FAIL", "You are already in this group.")
+            response = Protocol.build_response("groupjoin", "FAIL", "You are already a member of this group.")
             client_socket.send((response + '\n').encode())
             return
 
@@ -300,7 +300,7 @@ class BulletinBoardServer(threading.Thread):
 
             # Check for valid data and return fail if not
             if not username or not data:
-                response = Protocol.build_response(command, "FAIL", "Invalid Message")
+                response = Protocol.build_response(command, "FAIL", "Invalid message. Please ensure both username and message are provided.")
                 client_socket.send((response + '\n').encode())
                 return
 
@@ -310,7 +310,7 @@ class BulletinBoardServer(threading.Thread):
 
             if len(parts) < 2 or not parts[0].strip() or not parts[1].strip():
                 # Ensure both subject and message exist and are non-empty
-                response = Protocol.build_response(command, "FAIL", "Invalid Message")
+                response = Protocol.build_response(command, "FAIL", "Invalid message format. Both subject and content are required.")
                 client_socket.send((response + '\n').encode())
                 return
             
@@ -319,7 +319,7 @@ class BulletinBoardServer(threading.Thread):
 
             # Check if both subject and message are non-empty
             if group and group not in self.private_group_users:
-                response = Protocol.build_response(command, "FAIL", "Not a member of that group")
+                response = Protocol.build_response(command, "FAIL", "You are not a member of the specified group.")
                 client_socket.send((response + '\n').encode())
                 return
 
@@ -350,7 +350,7 @@ class BulletinBoardServer(threading.Thread):
 
         # Check if the group exists
         if not group or group not in self.private_group_users:
-            response = Protocol.build_response("groupleave", "FAIL", "Invalid group name.")
+            response = Protocol.build_response("groupleave", "FAIL", "Invalid group name. The group does not exist.")
             client_socket.send((response + '\n').encode())
             return
 
@@ -386,7 +386,7 @@ class BulletinBoardServer(threading.Thread):
     def client_leave(self, client_socket, username):
         """Handle a client leaving the message board."""
         if client_socket not in self.message_board_clients:
-            response = Protocol.build_response("leave", "FAIL", "You are not on the message board.")
+            response = Protocol.build_response("leave", "FAIL", "You are not currently connected to the message board.")
             client_socket.send((response + '\n').encode())
             return
 
@@ -414,7 +414,7 @@ class BulletinBoardServer(threading.Thread):
                 print(f'{username} disconnected')
 
             # Send a success response to the client for the exit command
-            response = Protocol.build_response("exit", "OK")
+            response = Protocol.build_response("exit", "OK", "You have successfully exited.")
             client_socket.send((response + '\n').encode())
 
             # Remove the client socket from connected clients list
@@ -426,7 +426,7 @@ class BulletinBoardServer(threading.Thread):
         except Exception as e:
             # Notify if any error occurs within this function
             print(f'Error when handling request from {username}: {e}')
-            response = Protocol.build_response("exit", "FAIL")
+            response = Protocol.build_response("exit", "FAIL", f"An error occurred while processing the exit request: {e}")
             client_socket.send((response + '\n').encode())
 
 
@@ -441,9 +441,9 @@ class BulletinBoardServer(threading.Thread):
             response = Protocol.build_response("groups", "OK", formatted_groups)
             client_socket.send((response + '\n').encode())
 
-        except:
+        except Exception as e:
             # If any point in the process above failed, send a FAIL response
-            response = Protocol.build_response("groups", "FAIL")
+            response = Protocol.build_response("groups", "FAIL", f"An error occurred while retrieving group information: {e}")
             client_socket.send((response + '\n'))
 
 

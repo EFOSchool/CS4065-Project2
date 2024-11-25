@@ -24,6 +24,14 @@ class Client:
         Prompt the user to input the connection details and establishes a connection to the server.
         NOTE: The default serve connect is addr = 'localhost' and port 6789
         """
+        # Print Welcome Message
+        welcome_message = \
+        """
+        Welcome to the Bulletin Board Client-Side.
+        Use '%connect <addr> <port>' to connect to the server.
+        Type '%help' to see a list of commands.
+        """
+        print(welcome_message)
 
         # Get the user input to establish a connection and ensure the input follows the correct format for connection
         user_in = input('>> ')
@@ -101,6 +109,7 @@ class Client:
                             # Safely grab the command and status values
                             command = header.get('command')
                             status = header.get('status')
+                            data = body.get('data')
 
                             # Display to the client the response (OK or FAIL) to their request
                             print(f"\r'{command}' Response: {status}\n>> ", end='')
@@ -108,12 +117,10 @@ class Client:
                             # If the response is for the connect command, data will contain the last 2 messages in the group joined
                             if command == 'join' and status == 'OK':
                                 # Display join confirmation
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
                             
                             elif command == 'history' and status == 'OK':
                                 # Display the message history or "no messages" notice
-                                data = body.get('data')
                                 if isinstance(data, list):  # Display the last two messages if available
                                     for msg in data:
                                         print(f'\rMessage ID: {msg["id"]}, Sender: {msg["sender"]}, '
@@ -123,39 +130,35 @@ class Client:
                                     
                             elif command == 'users':
                                 # Display the list of users/error message if available
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
                                 
                             elif command == 'message':
                                 # Display the message requested by the user
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
                             elif command == 'leave' and status == 'OK':
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
                             elif command == 'groups' and status == 'OK':
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
                                 
                             elif command == 'groupusers':
                                 # Display the list of users in the group or error is available
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
                             
                             elif command == 'groupmessage':
                                 # Display the message requested by the user (group specific)
-                                data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
-                            elif command == 'post' and status == 'FAIL':
-                                pass
-
                             if command == 'exit' and status == 'OK':
+                                # Shutdown the Client Side
                                 print('\rShutting down client...')
                                 self.shutdown()
                                 break
+
+                            if status == 'FAIL' and data:
+                                # Display Error Message from the Server
+                                print(f'\rERROR: {data}\n>> ', end='')
 
                         # If the command is 'notify' (a broadcast signal) display the message it contains in data
                         elif header.get('command') == 'notify':
@@ -225,6 +228,7 @@ class Client:
                     message = Protocol.build_request('groups')
                     self.socket.send(message.encode())
 
+                # If the user's prompt starst with '%post', call the post_helper method to handle it
                 elif message.startswith('%grouppost'):
                     self.post_helper(message, group=True)
                     
@@ -250,13 +254,17 @@ class Client:
                         groupmessage_request = Protocol.build_request('groupmessage', username=self.username, group=group, data=message_id)
                         self.socket.send((groupmessage_request + '\n').encode())
 
+                elif message == '%help':
+                    self.help()
+
         except Exception as e:
             print(f'Error sending message "{message}: {e}')
 
-        # except KeyboardInterrupt:
-        #     print('\nExiting...')
-        #     message = Protocol.build_request('exit', self.username)
-        #     self.socket.send(message.encode()) # Send exit command to server
+        except KeyboardInterrupt:
+            print('\nExiting...')
+            message = Protocol.build_request('exit', self.username)
+            self.socket.send(message.encode()) # Send exit command to server
+            sleep(.1) # Short wait to allow for server and client to handle request/response before ending
 
 
     def post_helper(self, message, group=False):
@@ -270,41 +278,100 @@ class Client:
         """
 
         if not group:
-            # Regular expression to capture quoted parts (subject and content)
-            # This will handle 2 quoted strings like "Hello Everyone" and "I am a new user"
-            post_match = re.match(r'%post\s+"([^"]+)"\s+"([^"]+)"', message)
+            try:
+                # Regular expression to capture quoted parts (subject and content)
+                # This will handle 2 quoted strings like "Hello Everyone" and "I am a new user"
+                post_match = re.match(r'%post\s+"([^"]+)"\s+"([^"]+)"', message)
 
-            # Extract the subject and content from the match
-            subject = post_match.group(1)
-            content = post_match.group(2)
+                # Extract the subject and content from the match
+                subject = post_match.group(1)
+                content = post_match.group(2)
+                
+                # Build the data field where the subject and content is seperated by a newline
+                data = f'{subject}\n{content}'
             
-            # Build the data field where the subject and content is seperated by a newline
-            data = f'{subject}\n{content}'
+            except:
+                # If any of the above fails, likely invalid input
+                print('ERROR: Must use the format, %post "<subject>" "<content>"')
 
             # Build the request for the post command and send to server
             request = Protocol.build_request('post', self.username, data=data)
             self.socket.send(request.encode())
 
         elif group:
-            # Regular expression to capture quoted parts (subject and content)
-            # This will handle 3 quote strings like "Group Four", "Hello Everyone", and "I am a new user"
-            grouppost_match = re.match(r'%grouppost\s+"([^"]+)"\s+"([^"]+)"\s+"([^"]+)"', message)
+            try:
+                # Regular expression to capture quoted parts (subject and content)
+                # This will handle 3 quote strings like "Group Four", "Hello Everyone", and "I am a new user"
+                grouppost_match = re.match(r'%grouppost\s+"([^"]+)"\s+"([^"]+)"\s+"([^"]+)"', message)
 
-            # Extract the subject and content from the match
-            group = grouppost_match.group(1)
-            subject = grouppost_match.group(2)
-            content = grouppost_match.group(3)
+                # Extract the subject and content from the match
+                group = grouppost_match.group(1)
+                subject = grouppost_match.group(2)
+                content = grouppost_match.group(3)
+                
+                # Build the data field where the subject and content is seperated by a newline
+                data = f'{subject}\n{content}'
             
-            # Build the data field where the subject and content is seperated by a newline
-            data = f'{subject}\n{content}'
+            except:
+                # If any of the above fails, likely invalid input
+                print('ERROR: Must use the format, %grouppost "<group>" "<subject>" "<content>"')
 
             # Build the request for the post command and send to server
             request = Protocol.build_request('grouppost', self.username, group, data)
             self.socket.send(request.encode())
 
         else:
-            print("Invalid message format")
-            return  # or handle error as needed
+            # Something with the message format was wrong, let the user know
+            print('Invalid message format, make sure it is:\n- %post "<subject>" "<content>"\n\tOR\n-%grouppost "<group>" "<subject>" "<content>"')
+            return
+        
+    
+    def help(self):
+        """Display a help menu"""
+        help_menu = \
+        """
+        Available Commands:
+
+        - %connect <addr> <port>
+        Connect to a server at the specified address and port.
+
+        - %post "<subject>" "<content>"
+        Post a message to the main bulletin board.
+
+        - %grouppost "<group>" "<subject>" "<content>"
+        Post a message to a specific group.
+
+        - %join
+        Join the main bulletin board.
+
+        - %groupjoin "<group>"
+        Join a specific group.
+
+        - %leave
+        Leave the main bulletin board.
+
+        - %groupleave "<group>"
+        Leave a specific group.
+
+        - %groups
+        List all available groups.
+
+        - %users
+        Show all users in the main bulletin board.
+
+        - %groupusers <group>
+        Show all users in a specific group.
+
+        - %message "<message id>"
+        View details of a specific message in the main bulletin board.
+
+        - %groupmessage "<group>" "<message id>"
+        View details of a specific message in a group.
+
+        - %exit
+        Exit the client application.
+        """
+        print(help_menu)
 
 
     def shutdown(self):
