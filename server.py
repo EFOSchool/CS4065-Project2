@@ -37,6 +37,15 @@ class BulletinBoardServer(threading.Thread):
                 "group four": [],
                 "group five": [],
             }
+            
+        self.private_group_users = \
+            {
+                "group one": [],
+                "group two": [],
+                "group three": [],
+                "group four": [],
+                "group five": [],
+            }
 
         # Boolean flag to help gracefully shutdown server with SIGINT
         self.running = True
@@ -168,6 +177,14 @@ class BulletinBoardServer(threading.Thread):
 
                 elif command == 'grouppost':
                     self.client_post(client_socket, username, data, group)
+
+                # Handle the groupusers command
+                elif command == 'groupusers':
+                    self.get_users(client_socket)
+                    
+                # Handle the groupmessage command
+                elif command == 'groupmessage':
+                    self.get_message(client_socket, data, group, username)
                     
         except Exception as e:
             # Notify if any error occurs within this function
@@ -258,6 +275,9 @@ class BulletinBoardServer(threading.Thread):
         # Add the client to the group
         self.private_groups[group].append(client_socket)
         print(f"{username} joined group {group}.")
+        
+        # Add the username to the private group users list
+        self.private_group_users[group].append(username)
 
         # Notify the user
         confirmation = Protocol.build_response("groupjoin", "OK", f"You have joined group {group}.")
@@ -482,70 +502,101 @@ class BulletinBoardServer(threading.Thread):
 
         return formatted_message['id'], timestamp
 
-    def get_users(self, client_socket):
+    def get_users(self, client_socket, group=None):
         """ 
-            Retrieve a list of users in the same group.
-            This is for Part 1, where we assume everyone is in 
-            the same (default) group.
+        Retrieve a list of users in the same group.
+        If they aren't in a group, get the list of users
+        from the default (public) board. 
         """
-                
+        # TODO: Make sure people from other groups cannot see the users in other groups
+        
         try:
             # Check if the client is in the message board clients list
             if client_socket not in self.message_board_clients:
                 response = Protocol.build_response("users", "FAIL", "Current user is not in a message board.")
                 client_socket.send((response + '\n').encode())
                 return
-            
-            # format response
-            user_list = ', '.join(self.default_board_users)
-            
-            # build response from users global list
+
+            # If a group is specified, retrieve users in that group
+            if group:
+                # Strip any surrounding quotes from the group name
+                group = group.strip('"').strip().lower()
+
+                # Check if the group exists
+                if group not in self.private_group_users:
+                    response = Protocol.build_response("users", "FAIL", "Group does not exist.")
+                    client_socket.send((response + '\n').encode())
+                    return
+
+                # Retrieve the list of users in the specified group
+                group_users = self.private_group_users[group]
+                user_list = ', '.join(group_users)
+            else:
+                # Retrieve the list of users in the default group
+                user_list = ', '.join(self.default_board_users)
+
+            # Build response from users list
             response = Protocol.build_response("users", "OK", user_list)
-            
-            # send response
+
+            # Send response
             client_socket.send((response + '\n').encode())
-            
+
         except Exception as e:
             # Notify if any error occurs within this function
             print(f'Error when handling users request: {e}')
-            
-            # send a failure response
+
+            # Send a failure response
             response = Protocol.build_response("users", "FAIL")
             client_socket.send((response + '\n').encode())
             
-    def get_message(self, client_socket, data):
+    def get_message(self, client_socket, data, group=None, username=None):
         """ 
-            Retrieve a message via ID from the message history
-            from the default message board (Part 1)
+        Retrieve a message via ID from the message history
+        from the message board or a specific group.
         """
+        
+        # check what data is
+        print(f"\n\nData: {data}")
+        
         try:
-            # using this to make sure they typed in an integer to get the ID
+            # Ensure the data is an integer
             message_id = int(data)
-            
-            # if there is an invalid ID given
+
+            # Check if the client is in the message board clients list
+            if client_socket not in self.message_board_clients:
+                response = Protocol.build_response("message", "FAIL", "Current user is not in a message board.")
+                client_socket.send((response + '\n').encode())
+                return
+
+            # If a group is specified, check if the client is a member of the group
+            if group:
+                group = group.strip('"').strip().lower()
+
+            # Check if there is an invalid ID given
             if message_id < 0 or message_id > len(self.messages):
-                # return a failure response
+                # Return a failure response
                 response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
                 client_socket.send((response + '\n').encode())
-            
-            # search through messages for the message with the given id
+                return
+
+            # Search through messages for the message with the given id
             for message in self.messages:
                 message_dict = json.loads(message)
-                # search by ID
-                if int(message_dict['id']) == int(data):
-                    # format the response for readability
+                # Search by ID
+                if int(message_dict['id']) == message_id:
+                    if group and message_dict.get('group') != group:
+                        continue  # Skip messages not belonging to the specified group
                     formatted_message = f"Subject: {message_dict['subject']}\nMessage: {message_dict['message']}"
-                    
-                    # build response with the message
                     response = Protocol.build_response("message", "OK", formatted_message)
                     client_socket.send((response + '\n').encode())
                     return
+
         except ValueError:
-            # if the data represents a non integer
+            # If the data represents a non-integer
             response = Protocol.build_response("message", "FAIL", "Invalid message ID.")
             client_socket.send((response + '\n').encode())
         except Exception as e:
-            print(f'Error when handling message request from: {e}')
+            print(f'Error when handling message request: {e}')
             response = Protocol.build_response("message", "FAIL")
             client_socket.send((response + '\n').encode())
         

@@ -138,6 +138,16 @@ class Client:
                             elif command == 'groups' and status == 'OK':
                                 data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
+                                
+                            elif command == 'groupusers':
+                                # Display the list of users in the group or error is available
+                                data = body.get('data')
+                                print(f'\r{data}\n>> ', end='')
+                            
+                            elif command == 'groupmessage':
+                                # Display the message requested by the user (group specific)
+                                data = body.get('data')
+                                print(f'\r{data}\n>> ', end='')
 
                             if command == 'exit' and status == 'OK':
                                 print('\rShutting down client...')
@@ -220,6 +230,28 @@ class Client:
 
                 elif message.startswith('%grouppost'):
                     self.post_helper(message, group=True)
+                    
+                # find users based on groups
+                elif message.startswith('%groupusers'):
+                    parts = message.split(' ', 1)
+                    # Prevent formatting issues
+                    if len(parts) < 2:
+                        print("ERROR: Must use the format, %groupusers <group>")
+                    else:
+                        group = parts[1]
+                        groupusers_request = Protocol.build_request('groupusers', group=group)
+                        self.socket.send((groupusers_request + '\n').encode())
+                    
+                # find message based on groups and an ID
+                elif message.startswith('%groupmessage'):
+                    match = re.match(r'%groupmessage\s+"([^"]+)"\s+(\d+)', message)
+                    if not match:
+                        print("ERROR: Must use the format, %groupmessage <group> <message_id>")
+                    else:
+                        group = match.group(1)
+                        message_id = match.group(2)
+                        groupmessage_request = Protocol.build_request('groupmessage', group=group, data=message_id)
+                        self.socket.send((groupmessage_request + '\n').encode())
 
                 # # Otherwise, send the typed message to the server
                 # message = Protocol.build_request('message', self.username, message)
