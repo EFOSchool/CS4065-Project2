@@ -149,6 +149,9 @@ class Client:
                                 data = body.get('data')
                                 print(f'\r{data}\n>> ', end='')
 
+                            elif command == 'post' and status == 'FAIL':
+                                pass
+
                             if command == 'exit' and status == 'OK':
                                 print('\rShutting down client...')
                                 self.shutdown()
@@ -160,12 +163,6 @@ class Client:
                             message = message.replace('\\n', '\n')
                             if message:
                                 print(f'\r{message}\n>> ', end='')
-
-                        # Handle 'notify board' for messages visible only to board participants
-                        elif header.get('command') == 'notify board':
-                            message = body.get('data')
-                            if message:
-                                print(f'\r[Board] {message}\n>> ', end='')
 
             except Exception as e:
                 # Only through an error if the client is still running
@@ -209,7 +206,7 @@ class Client:
                 elif message.startswith('%message'):
                     # build protocol with the ID given by the user
                     message_id = message.split()[1]
-                    message_request = Protocol.build_request('message', self.username, message_id)
+                    message_request = Protocol.build_request('message', self.username, data=message_id)
                     self.socket.send(message_request.encode())
                 
                 # If the user types '%exit', send it to the server and break the loop
@@ -239,7 +236,7 @@ class Client:
                         print("ERROR: Must use the format, %groupusers <group>")
                     else:
                         group = parts[1]
-                        groupusers_request = Protocol.build_request('groupusers', group=group)
+                        groupusers_request = Protocol.build_request('groupusers', username=self.username, group=group)
                         self.socket.send((groupusers_request + '\n').encode())
                     
                 # find message based on groups and an ID
@@ -250,12 +247,8 @@ class Client:
                     else:
                         group = match.group(1)
                         message_id = match.group(2)
-                        groupmessage_request = Protocol.build_request('groupmessage', group=group, data=message_id)
+                        groupmessage_request = Protocol.build_request('groupmessage', username=self.username, group=group, data=message_id)
                         self.socket.send((groupmessage_request + '\n').encode())
-
-                # # Otherwise, send the typed message to the server
-                # message = Protocol.build_request('message', self.username, message)
-                # self.socket.send(message.encode())
 
         except Exception as e:
             print(f'Error sending message "{message}: {e}')
