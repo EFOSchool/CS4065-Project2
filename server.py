@@ -180,7 +180,7 @@ class BulletinBoardServer(threading.Thread):
 
                 # Handle the groupusers command
                 elif command == 'groupusers':
-                    self.get_users(client_socket)
+                    self.get_users(client_socket, username=username, group=group)
                     
                 # Handle the groupmessage command
                 elif command == 'groupmessage':
@@ -374,6 +374,9 @@ class BulletinBoardServer(threading.Thread):
         # Remove the client from the group
         self.private_groups[group].remove(client_socket)
         print(f"{username} left group {group}.")
+        
+        # Remove the username from the private group users list
+        self.private_group_users[group].remove(username)
 
         # Notify the user that they have successfully left the group
         confirmation = Protocol.build_response("groupleave", "OK", f"You have left group {group}.")
@@ -502,13 +505,12 @@ class BulletinBoardServer(threading.Thread):
 
         return formatted_message['id'], timestamp
 
-    def get_users(self, client_socket, group=None):
+    def get_users(self, client_socket, username=None, group=None):
         """ 
         Retrieve a list of users in the same group.
         If they aren't in a group, get the list of users
         from the default (public) board. 
         """
-        # TODO: Make sure people from other groups cannot see the users in other groups
         
         try:
             # Check if the client is in the message board clients list
@@ -519,12 +521,19 @@ class BulletinBoardServer(threading.Thread):
 
             # If a group is specified, retrieve users in that group
             if group:
-                # Strip any surrounding quotes from the group name
+                # Strip any surrounding quotes from the group name for searching
                 group = group.strip('"').strip().lower()
 
                 # Check if the group exists
                 if group not in self.private_group_users:
                     response = Protocol.build_response("users", "FAIL", "Group does not exist.")
+                    client_socket.send((response + '\n').encode())
+                    return
+                
+                # If the current user is not in the group, return a failure response
+                # based on username
+                if username not in self.private_group_users[group]:
+                    response = Protocol.build_response("users", "FAIL", "Current user is not in the group. Access Denied.")
                     client_socket.send((response + '\n').encode())
                     return
 
@@ -555,9 +564,6 @@ class BulletinBoardServer(threading.Thread):
         from the message board or a specific group.
         """
         
-        # check what data is
-        print(f"\n\nData: {data}")
-        
         try:
             # Ensure the data is an integer
             message_id = int(data)
@@ -581,11 +587,16 @@ class BulletinBoardServer(threading.Thread):
 
             # Search through messages for the message with the given id
             for message in self.messages:
+                # Format the message into a dictionary for ease of use
                 message_dict = json.loads(message)
                 # Search by ID
                 if int(message_dict['id']) == message_id:
-                    if group and message_dict.get('group') != group:
-                        continue  # Skip messages not belonging to the specified group
+                    if group and group != message_dict.get("group") and username not in self.private_group_users[group]:
+                        # search in the group for the current username to check their access
+                        # if they are not in the group return an error
+                        response = Protocol.build_response("message", "FAIL", "Current user is not in the group. Access Denied.")
+                        client_socket.send((response + '\n').encode())
+                        return
                     formatted_message = f"Subject: {message_dict['subject']}\nMessage: {message_dict['message']}"
                     response = Protocol.build_response("message", "OK", formatted_message)
                     client_socket.send((response + '\n').encode())
