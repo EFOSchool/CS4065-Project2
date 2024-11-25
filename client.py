@@ -117,7 +117,7 @@ class Client:
                             # If the response is a failure output the message
                             if status == 'FAIL':
                                 # Display Error Message from the Server
-                                print(f'\rFAILURE: {data}\n>> ', end='')
+                                print(f'\rFAILURE: {data}\n', end='')
 
                             # # If the response is for the connect command, data will contain the last 2 messages in the group joined
                             # if command == 'join' and status == 'OK':

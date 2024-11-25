@@ -36,7 +36,7 @@ class BulletinBoardServer(threading.Thread):
                 "group five": []
             }
         self.message_board_clients = []
-        self.default_board_users = []
+        self.message_board_users = []
         self.private_group_clients = \
             {
                 "group one": [],
@@ -236,7 +236,7 @@ class BulletinBoardServer(threading.Thread):
         print(f"{username} joined the message board.")
         
         # Add the username to the default board users list
-        self.default_board_users.append(username)
+        self.message_board_users.append(username)
 
         # Notify the client that they have joined
         join_confirmation = Protocol.build_response("join", "OK", "You have joined the message board.")
@@ -317,7 +317,13 @@ class BulletinBoardServer(threading.Thread):
             # Now that the subject and message are separated they get stored in subject and message variables
             subject, message = parts[0].strip(), parts[1].strip()
 
-            # Check if both subject and message are non-empty
+            # Check if the user has joined the public message board
+            if client_socket not in self.message_board_clients:
+                response = Protocol.build_response(command, "FAIL", "You are not a member of the public message board.")
+                client_socket.send((response + '\n').encode())
+                return
+
+            # Check if the the user is in the specified private group
             if group and group not in self.private_group_users:
                 response = Protocol.build_response(command, "FAIL", "You are not a member of the specified group.")
                 client_socket.send((response + '\n').encode())
@@ -378,8 +384,8 @@ class BulletinBoardServer(threading.Thread):
         # Add the client back to the main message board
         if client_socket not in self.message_board_clients:
             self.message_board_clients.append(client_socket)
-            if username not in self.default_board_users:  
-                self.default_board_users.append(username)
+            if username not in self.message_board_users:  
+                self.message_board_users.append(username)
             print(f"{username} rejoined the message board.")
 
 
@@ -395,7 +401,7 @@ class BulletinBoardServer(threading.Thread):
         print(f"{username} left the message board.")
         
         # Remove the username from the default board list
-        self.default_board_users.remove(username)
+        self.message_board_users.remove(username)
 
         # Notify the leaving client
         response = Protocol.build_response("leave", "OK", "You have left the message board.")
@@ -522,7 +528,7 @@ class BulletinBoardServer(threading.Thread):
                 user_list = ', '.join(group_users)
             else:
                 # Retrieve the list of users in the default group
-                user_list = ', '.join(self.default_board_users)
+                user_list = ', '.join(self.message_board_users)
 
             # Build response from users list
             response = Protocol.build_response("users", "OK", user_list)
