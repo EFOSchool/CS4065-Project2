@@ -29,6 +29,7 @@ class Client:
         """
         Welcome to the Bulletin Board Client-Side.
         Use '%connect <addr> <port>' to connect to the server.
+        The default <addr> is 'localhost' and the <port> is '6789'.
         Type '%help' to see a list of commands.
         """
         print(welcome_message)
@@ -190,6 +191,9 @@ class Client:
                 # Prompt for user input and send the message 
                 message = input('>> ')
 
+                if not message:
+                    continue  # Ignore empty input
+
                 if message.startswith('%join'):
                     join_request = Protocol.build_request('join', self.username)
                     self.socket.send(join_request.encode())
@@ -213,10 +217,14 @@ class Client:
                     self.socket.send(users_request.encode())
                     
                 elif message.startswith('%message'):
-                    # build protocol with the ID given by the user
-                    message_id = message.split()[1]
-                    message_request = Protocol.build_request('message', self.username, data=message_id)
-                    self.socket.send(message_request.encode())
+                    parts = message.split()
+                    if len(parts) < 2:
+                        print("ERROR: Must use the format, %message <message_id>")
+                    else:
+                        # build protocol with the ID given by the user
+                        message_id = message.split()[1]
+                        message_request = Protocol.build_request('message', self.username, data=message_id)
+                        self.socket.send(message_request.encode())
                 
                 # If the user types '%exit', send it to the server and break the loop
                 elif message == '%exit':
@@ -262,6 +270,9 @@ class Client:
 
                 elif message == '%help':
                     self.help()
+
+                else:
+                    print("ERROR: Unknown command. Type '%help' for the list of available commands.")
 
         except Exception as e:
             print(f'Error sending message "{message}: {e}')

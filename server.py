@@ -130,13 +130,20 @@ class BulletinBoardServer(threading.Thread):
                 # print(f"Received message from {addr}: {message}")  # Debug log
 
                 # Parse the message using the Protocol class
-                request = json.loads(message)
-                header = request.get('header')
-                command = header.get('command')
-                username = header.get('username')
-                group = header.get('group')
-                body = request.get('body')
-                data = body.get('data')
+                try:
+                    request = json.loads(message)
+                    header = request.get('header')
+                    command = header.get('command')
+                    username = header.get('username')
+                    group = header.get('group')
+                    body = request.get('body')
+                    data = body.get('data')
+
+                except json.JSONDecodeError:
+                    # Invalid JSON sent by the client
+                    response = Protocol.build_response("error", "FAIL", "Invalid request format.")
+                    client_socket.send((response + '\n').encode())
+                    continue
 
                 # Handle the connect command
                 if command == 'connect':
@@ -192,7 +199,12 @@ class BulletinBoardServer(threading.Thread):
                 # Handle the groupmessage command
                 elif command == 'groupmessage':
                     self.get_message(client_socket, data=data, group=group, username=username)
-                    
+
+                else:
+                    # Command not recognized
+                    response = Protocol.build_response("error", "FAIL", f"Unknown command: {command}")
+                    client_socket.send((response + '\n').encode())  
+
         except Exception as e:
             # Notify if any error occurs within this function
             print(f'Error when handling request from {addr}: {e}')
@@ -271,7 +283,7 @@ class BulletinBoardServer(threading.Thread):
 
         # Add the client to the group
         self.private_group_clients[group].append(client_socket)
-        print(f"{username} joined group {group}.")
+        print(f"{username} joined {group}.")
         
         # Add the username to the private group users list
         self.private_group_users[group].append(username)
@@ -289,7 +301,7 @@ class BulletinBoardServer(threading.Thread):
         client_socket.send((response + '\n').encode())
 
         # Notify other group members
-        self.notify(f"{username} has joined the group {group}.", clients=self.private_group_clients[group], sender=client_socket)
+        self.notify(f"{username} has joined {group}.", clients=self.private_group_clients[group], sender=client_socket)
 
 
     def client_post(self, client_socket, username, data, group=None):
@@ -352,7 +364,6 @@ class BulletinBoardServer(threading.Thread):
     def client_groupleave(self, client_socket, username, group):
         """Handle a client leaving a private group."""
         group = group.strip().lower()  # Clean up input
-        print(f"Attempting to remove {username} from group: {group}")
 
         # Check if the group exists
         if not group or group not in self.private_group_users:
@@ -362,24 +373,23 @@ class BulletinBoardServer(threading.Thread):
 
         # Check if the client is a member of the group
         if client_socket not in self.private_group_clients[group]:
-            print(f"Client {username} is not in group '{group}'. Current members: {self.private_group_clients[group]}")
             response = Protocol.build_response("groupleave", "FAIL", "You are not a member of this group.")
             client_socket.send((response + '\n').encode())
             return
 
         # Remove the client from the group
         self.private_group_clients[group].remove(client_socket)
-        print(f"{username} left group {group}.")
+        print(f"{username} left {group}.")
         
         # Remove the username from the private group users list
         self.private_group_users[group].remove(username)
 
         # Notify the user that they have successfully left the group
-        confirmation = Protocol.build_response("groupleave", "OK", f"You have left group {group}.")
+        confirmation = Protocol.build_response("groupleave", "OK", f"You have left {group}.")
         client_socket.send((confirmation + '\n').encode())
 
         # Notify other group members
-        self.notify(f"{username} has left the group {group}.", clients=self.private_group_clients[group], sender=client_socket)
+        self.notify(f"{username} has left {group}.", clients=self.private_group_clients[group], sender=client_socket)
 
         # Add the client back to the main message board
         if client_socket not in self.message_board_clients:
