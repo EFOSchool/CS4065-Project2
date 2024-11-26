@@ -34,43 +34,66 @@ class Client:
         """
         print(welcome_message)
 
-        # Get the user input to establish a connection and ensure the input follows the correct format for connection
-        user_in = input('>> ')
-        while not user_in.startswith('%connect') or len(user_in.split()) != 3:
-            print('ERROR: Must establish connection using the format, %connect <addr> <port>, before doing anything else')
-            user_in = input('>> ')
-        
-        # Split the input and extract the server address and port number 
-        parts = user_in.split()
-        addr = parts[1]
-        port = int(parts[2])
+        while True:
+            # Get the user input to establish a connection and ensure the input follows the correct format for connection
+            user_in = input('>> ').strip()
+            if user_in.startswith('%connect') and len(user_in.split()) == 3:
+                # Split the input and extract the server address and port number 
+                parts = user_in.split()
+                addr = parts[1]
+                port = int(parts[2])
 
-        # Establish connection with the specified address adn port
-        self.connect(addr, port)
+                # Establish connection with the specified address adn port
+                self.connect(addr, port)
+                break  # Exit loop once connection is successful
+            
+            else:   
+                print('ERROR: Must establish connection using the format, %connect <addr> <port>, before doing anything else')
+            
     
     def connect(self, host, port):
         """Connect to the bulletin board server"""
 
         try:
-            # Set host and port for the connection
-            self.host = host
-            self.port = port
+            while True: # Loop until a valid connection is established
+                # Set host and port for the connection
+                self.host = host
+                self.port = port
 
-            # Establish connection to the server
-            self.socket.connect((self.host, self.port))
-            print(f'Connected to the server at {self.host}: port {self.port}')
+                # Establish connection to the server
+                self.socket.connect((self.host, self.port))
+                print(f'Connected to the server at {self.host}: port {self.port}')
 
-            # Start a thread to listen for incoming messages from the server
-            receive_thread = threading.Thread(target=self.receive_messages)
-            receive_thread.daemon = True
-            receive_thread.start()
+                # Start a thread to listen for incoming messages from the server
+                receive_thread = threading.Thread(target=self.receive_messages)
+                receive_thread.daemon = True
+                receive_thread.start()
 
-            # Send username to the server
-            self.username = input("Enter your username: ")
-            conncetion_request = Protocol.build_request('connect', self.username)
-            self.socket.send(conncetion_request.encode())
+                # Send username to the server
+                self.username = input("Enter your username: ")
+                connection_request = Protocol.build_request('connect', self.username)
+                self.socket.send(connection_request.encode())
 
-            # Start sending messages
+                # Wait for the server's response
+                response = self.socket.recv(1024).decode().strip()
+                if response:
+                    response_dict = json.loads(response)
+                    status = response_dict['header'].get('status')
+                    message = response_dict['body'].get('data')
+
+                    if status == 'OK':
+                        print("Successfully connected to the server!")
+                        break  # Exit the loop if the connection is successful
+                    elif status == 'FAIL':
+                        print(f"FAILURE: {message}")
+                        self.socket.close()  # Close the socket and restart the process
+                        self.socket = socket(AF_INET, SOCK_STREAM)
+                else:
+                    print("No response from the server. Retrying...")
+                    self.socket.close()
+                    self.socket = socket(AF_INET, SOCK_STREAM)
+
+            # Start sending messages after successful connection
             self.send_messages()
 
         except Exception as e:
