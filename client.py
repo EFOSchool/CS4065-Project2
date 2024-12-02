@@ -17,6 +17,7 @@ class Client:
         self.socket = socket(AF_INET, SOCK_STREAM)
         self.username = None
         self.running = True
+        self.exit_confirmed = False
 
 
     def run(self):
@@ -139,6 +140,14 @@ class Client:
                             if status == 'FAIL':
                                 # Display Error Message from the Server
                                 print(f'\rFAILURE: {data}\n', end='')
+
+                            # Handle if the response is a successful exit command
+                            if command == 'exit' and status == 'OK':
+                                self.exit_confirmed = True # bool flag to let send_messages know it is ok to shutdown
+                                # Shutdown the Client Side
+                                print('\rShutting down client...')
+                                self.shutdown()
+                                break
                             
                             elif command == 'history':
                                 # Display the message history or "no messages" notice
@@ -149,12 +158,6 @@ class Client:
                                             f'Time Posted: {msg["timestamp"]}, Subject: {msg["subject"]}\n>> ', end='')
                                 else:
                                     print(f'\r{data}\n>> ', end='')
-
-                            elif command == 'exit':
-                                # Shutdown the Client Side
-                                print('\rShutting down client...')
-                                self.shutdown()
-                                break
 
                             elif data:
                                 # Display the data contained in the response 
@@ -229,8 +232,9 @@ class Client:
                 elif message == '%exit':
                     message = Protocol.build_request('exit', self.username)
                     self.socket.send(message.encode())
-                    sleep(.1) # Short wait to allow for server and client to handle request/response before ending
-                    break
+                    sleep(.2) # Short wait to allow for server and client to handle request/response before ending
+                    if self.exit_confirmed: # Only break if the and OK response is recieved from server
+                        break
 
                 # If the user's prompt starst with '%post', call the post_helper method to handle it
                 elif message.startswith('%post'):
