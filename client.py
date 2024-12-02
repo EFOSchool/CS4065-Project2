@@ -135,18 +135,10 @@ class Client:
                             status = header.get('status')
                             data = body.get('data')
 
-                            # Display to the client the response (OK or FAIL) to their request
-                            # print(f"\r'{command}' Response: {status}\n", end='')
-
                             # If the response is a failure output the message
                             if status == 'FAIL':
                                 # Display Error Message from the Server
                                 print(f'\rFAILURE: {data}\n', end='')
-
-                            # # If the response is for the connect command, data will contain the last 2 messages in the group joined
-                            # if command == 'join' and status == 'OK':
-                            #     # Display join confirmation
-                            #     print(f'\r{data}\n>> ', end='')
                             
                             elif command == 'history':
                                 # Display the message history or "no messages" notice
@@ -157,28 +149,6 @@ class Client:
                                             f'Time Posted: {msg["timestamp"]}, Subject: {msg["subject"]}\n>> ', end='')
                                 else:
                                     print(f'\r{data}\n>> ', end='')
-                                    
-                            # elif command == 'users':
-                            #     # Display the list of users/error message if available
-                            #     print(f'\r{data}\n>> ', end='')
-                                
-                            # elif command == 'message':
-                            #     # Display the message requested by the user
-                            #     print(f'\r{data}\n>> ', end='')
-
-                            # elif command == 'leave' and status == 'OK':
-                            #     print(f'\r{data}\n>> ', end='')
-
-                            # elif command == 'groups' and status == 'OK':
-                            #     print(f'\r{data}\n>> ', end='')
-                                
-                            # elif command == 'groupusers':
-                            #     # Display the list of users in the group or error is available
-                            #     print(f'\r{data}\n>> ', end='')
-                            
-                            # elif command == 'groupmessage':
-                            #     # Display the message requested by the user (group specific)
-                            #     print(f'\r{data}\n>> ', end='')
 
                             elif command == 'exit':
                                 # Shutdown the Client Side
@@ -198,7 +168,7 @@ class Client:
                                 print(f'\r{message}\n>> ', end='')
 
             except Exception as e:
-                # Only through an error if the client is still running
+                # Only throw an error if the client is still running
                 # This is added to address that recieve messages will still be running when the socket closes
                 if self.running:
                     print('Error receiving message or connection to the server may have been lost')
@@ -217,28 +187,34 @@ class Client:
                 if not message:
                     continue  # Ignore empty input
 
+                # If the user types '%join', send it to the server
                 if message.startswith('%join'):
                     join_request = Protocol.build_request('join', self.username)
                     self.socket.send(join_request.encode())
 
+                # If the user types '%groupjoin', send it to the server
                 elif message.startswith('%groupjoin'):
                     group_name = message.split(maxsplit=1)[1].strip('"').strip("'")
                     join_request = Protocol.build_request('groupjoin', self.username, group=group_name)
                     self.socket.send(join_request.encode())
 
+                # If the user types '%groupleave', send it to the server
                 elif message.startswith('%groupleave'):
                     group_name = message.split(maxsplit=1)[1].strip('"').strip("'")
                     leave_request = Protocol.build_request('groupleave', self.username, group=group_name)
                     self.socket.send(leave_request.encode())
 
+                # If the user types '%leave', send it to the server
                 elif message.startswith('%leave'):
                     leave_request = Protocol.build_request('leave', self.username)
                     self.socket.send(leave_request.encode())
-                    
+
+                # If the user types '%users', send it to the server    
                 elif message.startswith('%users'):
                     users_request = Protocol.build_request('users', self.username)
                     self.socket.send(users_request.encode())
-                    
+
+                # If the user types '%message', send it to the server  
                 elif message.startswith('%message'):
                     parts = message.split()
                     if len(parts) < 2:
@@ -291,9 +267,11 @@ class Client:
                         groupmessage_request = Protocol.build_request('groupmessage', username=self.username, group=group, data=message_id)
                         self.socket.send((groupmessage_request + '\n').encode())
 
+                # Display the help menu
                 elif message == '%help':
                     self.help()
 
+                # If the command isn't recognize, recommend the %help command for guidance
                 else:
                     print("ERROR: Unknown command. Type '%help' for the list of available commands.")
 
