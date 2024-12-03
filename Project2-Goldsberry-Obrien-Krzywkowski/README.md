@@ -14,7 +14,7 @@ This is a simple bulletin board using socket programming for the course CS4065 -
 
 1. cd to the decompressed file
    
-   `Project2-Goldsberry-Obrien-Krzywkowski`
+   `cd Project2-Goldsberry-Obrien-Krzywkowski`
 
 2. Run the server
    
