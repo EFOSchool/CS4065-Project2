@@ -6,7 +6,7 @@
 * Emma O'Brien
 
 ## Overview
-This is a simple bulletin board using socket programming for the course CS4065 - Computer Networks and Networked Computing. Users are able to connect to a server, join public and private message boards, and can send and receive messages within those boards. 
+This is a simple bulletin board using socket programming for the course CS4065 - Computer Networks and Networked Computing. Users can connect to a server, join public and private message boards, and send and receive messages within those boards. 
 
 ## Compilation Instructions
 1. cd to the decompressed file
