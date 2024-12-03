@@ -1,20 +1,25 @@
 # CS4065-Project2: Simple Bulletin Board Using Socket Programming
 
 ## Team Members:
+
 * Matthew Goldsberry
 * Hannah Krzywkowski
 * Emma O'Brien
 
 ## Overview
+
 This is a simple bulletin board using socket programming for the course CS4065 - Computer Networks and Networked Computing. Users can connect to a server, join public and private message boards, and send and receive messages within those boards. 
 
 ## Compilation Instructions
+
 1. cd to the decompressed file
    
    `Project2-Goldsberry-Obrien-Krzywkowski`
+
 2. Run the server
    
    `python server.py`
+
 3. While the server is running, open a new terminal and run the client
    
    `python client.py`
