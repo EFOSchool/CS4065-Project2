@@ -250,16 +250,12 @@ class BulletinBoardServer(threading.Thread):
         # Add the username to the default board users list
         self.message_board_users.append(username)
 
-        # Notify the client that they have joined
-        join_confirmation = Protocol.build_response("join", "OK", "You have joined the message board.")
-        client_socket.send((join_confirmation + '\n').encode())
-
         # Send the last two messages in the message history
         if len(self.messages["public board"]) > 0:
             history_data = [json.loads(msg) for msg in (self.messages["public board"][-2:] if len(self.messages["public board"]) >= 2 else self.messages["public board"])]
-            response = Protocol.build_response("history", "OK", history_data)
+            response = Protocol.build_response("join", "OK", history_data)
         else:
-            response = Protocol.build_response("history", "OK", "There are no messages on the board yet.")
+            response = Protocol.build_response("join", "OK", "There are no messages on the board yet.")
         client_socket.send((response + '\n').encode())
 
         # Notify others on the board
@@ -270,6 +266,12 @@ class BulletinBoardServer(threading.Thread):
         group = group.strip().lower()  # Clean up input
 
         """Handle a client joining a private group."""
+        # Check if the user has joined the public message board
+        if client_socket not in self.message_board_clients:
+            response = Protocol.build_response("groupjoin", "FAIL", "You are not a member of the public message board.")
+            client_socket.send((response + '\n').encode())
+            return
+
         if not group or group not in self.private_group_users:
             response = Protocol.build_response("groupjoin", "FAIL", "The specified group does not exist.")
             client_socket.send((response + '\n').encode())
@@ -288,16 +290,12 @@ class BulletinBoardServer(threading.Thread):
         # Add the username to the private group users list
         self.private_group_users[group].append(username)
 
-        # Notify the user
-        confirmation = Protocol.build_response("groupjoin", "OK", f"You have joined {group}.")
-        client_socket.send((confirmation + '\n').encode())
-
         # Send group history or no messages notice
         group_messages = [json.loads(msg) for msg in self.messages[group]]
         if group_messages:
-            response = Protocol.build_response("history", "OK", group_messages[-2:])
+            response = Protocol.build_response("groupjoin", "OK", group_messages[-2:])
         else:
-            response = Protocol.build_response("history", "OK", "There are no messages in this group yet.")
+            response = Protocol.build_response("groupjoin", "OK", "There are no messages in this group yet.")
         client_socket.send((response + '\n').encode())
 
         # Notify other group members
@@ -428,6 +426,17 @@ class BulletinBoardServer(threading.Thread):
             if username:
                 self.notify(f'{username} has left the server', clients=self.clients, sender=client_socket)
                 print(f'{username} disconnected')
+
+            # Remove the client socket and username from any lists they may be in
+            if client_socket in self.message_board_clients:
+                self.message_board_clients.remove(client_socket)
+            if username in self.message_board_users:
+                self.message_board_users.remove(username)
+            for key in self.private_group_clients.keys():
+                if client_socket in self.private_group_clients.get(key, []):
+                    self.private_group_clients[key].remove(client_socket)
+                if username in self.private_group_users.get(key, []):
+                    self.private_group_users[key].remove(username)
 
             # Send a success response to the client for the exit command
             response = Protocol.build_response("exit", "OK", "You have successfully exited.")

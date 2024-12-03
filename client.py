@@ -31,6 +31,7 @@ class Client:
         Welcome to the Bulletin Board Client-Side.
         Use '%connect <addr> <port>' to connect to the server.
         The default <addr> is 'localhost' and the <port> is '6789'.
+        After connecting to the server, use '%join' to enable access to other commands.
         Type '%help' to see a list of commands.
         """
         print(welcome_message)
@@ -139,18 +140,20 @@ class Client:
                             # If the response is a failure output the message
                             if status == 'FAIL':
                                 # Display Error Message from the Server
-                                print(f'\rFAILURE: {data}\n', end='')
+                                print(f'\rFAILURE: {data}\n>> ', end='')
 
                             # Handle if the response is a successful exit command
-                            if command == 'exit' and status == 'OK':
+                            elif command == 'exit' and status == 'OK':
                                 self.exit_confirmed = True # bool flag to let send_messages know it is ok to shutdown
                                 # Shutdown the Client Side
                                 print('\rShutting down client...')
                                 self.shutdown()
                                 break
                             
-                            elif command == 'history':
+                            # Handle if the response is join or groupjoin (ones containing historical messages)
+                            elif command == 'join' or command == 'groupjoin':
                                 # Display the message history or "no messages" notice
+                                print("You have joined the message board.")
                                 if isinstance(data, list):  # Display the last two messages if available
                                     print('Last two messages:')
                                     for msg in data:
@@ -159,9 +162,10 @@ class Client:
                                 else:
                                     print(f'\r{data}\n>> ', end='')
 
+                            # Handle any other, OK responses
                             elif data:
                                 # Display the data contained in the response 
-                                print(f'\r{data}\n>> ', end='')
+                                print(f'\r{data}\n', end='')
 
                         # If the command is 'notify' (a broadcast signal) display the message it contains in data
                         elif header.get('command') == 'notify':
